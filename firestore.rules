@@ -1,0 +1,246 @@
+rules_version = '2';
+
+// ===============================================================
+// Vanpool Coordinator — Firestore Security Rules
+// ===============================================================
+//
+// Assumed Data Model:
+//
+// Collection: users
+// Document ID: Firebase Auth UID
+// Fields:
+//   - firstName: string (required, 1-50 chars)
+//   - lastName: string (required, 1-50 chars)
+//   - email: string (required, valid email, <= 254 chars)
+//   - role: string (required, "Driver" or "Rider")
+//   - isAdmin: bool (required)
+//   - photoBase64: string (optional, <= 75000 chars)
+//   - createdAt: timestamp (required, immutable)
+//   - updatedAt: timestamp (required)
+//
+// Collection: rides
+// Document ID: auto-generated
+// Fields:
+//   - date: string (required, YYYY-MM-DD format, <= 10 chars)
+//   - departureFromTC: string (required, HH:MM format, <= 5 chars)
+//   - departureFromWork: string (required, HH:MM format, <= 5 chars)
+//   - status: string (required, "requested" or "scheduled")
+//   - driverId: string|null (optional, valid UID when scheduled)
+//   - driverName: string|null (optional, <= 101 chars)
+//   - rsvps: list (required, max 7 items, each string <= 128 chars)
+//   - createdBy: string (required, immutable, UID of creator)
+//   - createdAt: timestamp (required, immutable)
+//   - updatedAt: timestamp (required)
+//
+// Collection: notifications
+// Document ID: auto-generated
+// Fields:
+//   - type: string (required)
+//   - recipientEmails: list (required)
+//   - subject: string (required)
+//   - body: string (required)
+//   - processed: bool (required)
+//   - createdAt: timestamp (required)
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdminUser() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    function isDriverUser() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Driver";
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.size() <= 254 &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['firstName', 'lastName', 'email', 'role', 'isAdmin', 'photoBase64', 'createdAt', 'updatedAt']) &&
+        data.firstName is string && data.firstName.size() >= 1 && data.firstName.size() <= 50 &&
+        data.lastName is string && data.lastName.size() >= 1 && data.lastName.size() <= 50 &&
+        isValidEmail(data.email) &&
+        data.role in ['Driver', 'Rider'] &&
+        data.isAdmin is bool &&
+        (!('photoBase64' in data) || (data.photoBase64 is string && data.photoBase64.size() <= 75000)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidRide(data) {
+      return hasOnlyAllowedFields(['date', 'departureFromTC', 'departureFromWork', 'status', 'driverId', 'driverName', 'rsvps', 'createdBy', 'createdAt', 'updatedAt']) &&
+        data.date is string && data.date.size() == 10 &&
+        data.departureFromTC is string && data.departureFromTC.size() <= 5 &&
+        data.departureFromWork is string && data.departureFromWork.size() <= 5 &&
+        data.status in ['requested', 'scheduled'] &&
+        data.rsvps is list && data.rsvps.size() <= 7 &&
+        data.createdBy is string && data.createdBy.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        // If scheduled, driverId must exist
+        (data.status == 'requested' || (data.driverId is string && data.driverId.size() <= 128)) &&
+        // driverName size limit
+        (!('driverName' in data) || data.driverName == null || (data.driverName is string && data.driverName.size() <= 101));
+    }
+
+    // ===============================================================
+    // Users Collection
+    // ===============================================================
+
+    match /users/{userId} {
+      // Any authenticated user can read their own document
+      // Admins can read any user document
+      allow read: if isOwner(userId) || isAdminUser();
+
+      // First-user bootstrap: if no users exist, allow the first user
+      // to create their own doc with isAdmin=true.
+      // After that, only admins can create user docs.
+      allow create: if isAuthenticated() &&
+        isValidUser(request.resource.data) &&
+        (
+          // Admin creating a user (admin can set any role/isAdmin)
+          isAdminUser() ||
+          // Self-creating own document (first user bootstrap or self-linking)
+          (isOwner(userId) && request.resource.data.email == request.auth.token.email)
+        );
+
+      // Users can update their own profile (but NOT role or isAdmin)
+      // Admins can update any user's profile
+      allow update: if isAuthenticated() &&
+        isValidUser(request.resource.data) &&
+        areImmutableFieldsUnchanged(['createdAt']) &&
+        (
+          // Self-update: cannot change role or isAdmin
+          (isOwner(userId) &&
+            request.resource.data.role == resource.data.role &&
+            request.resource.data.isAdmin == resource.data.isAdmin
+          ) ||
+          // Admin update: can change anything except createdAt
+          isAdminUser()
+        );
+
+      // Only admins can delete users
+      allow delete: if isAdminUser();
+    }
+
+    // ===============================================================
+    // Rides Collection
+    // ===============================================================
+
+    match /rides/{rideId} {
+      // Any authenticated user can read rides
+      allow read: if isAuthenticated();
+
+      // Any authenticated user can create rides, with constraints:
+      // - Riders can only create with status 'requested'
+      // - Drivers can create with any status
+      // - If scheduled, driverId must be the creator
+      allow create: if isAuthenticated() &&
+        isValidRide(request.resource.data) &&
+        request.resource.data.createdBy == request.auth.uid &&
+        (
+          // Rider: must be 'requested', no driver assignment
+          (request.resource.data.status == 'requested' &&
+           (request.resource.data.driverId == null || !('driverId' in request.resource.data))
+          ) ||
+          // Driver: can be scheduled (driver must be self) or requested
+          (isDriverUser() &&
+            (
+              request.resource.data.status == 'requested' ||
+              (request.resource.data.status == 'scheduled' && request.resource.data.driverId == request.auth.uid)
+            )
+          )
+        );
+
+      // Updates: admin, or the ride's driver, or a driver claiming a requested ride
+      // RSVP updates allowed for any authenticated user (just the rsvps array)
+      allow update: if isAuthenticated() &&
+        isValidRide(request.resource.data) &&
+        areImmutableFieldsUnchanged(['createdAt', 'createdBy']) &&
+        (
+          // Admin can update anything
+          isAdminUser() ||
+          // Ride's driver can update their own ride
+          (resource.data.driverId == request.auth.uid) ||
+          // Driver claiming a requested ride
+          (isDriverUser() &&
+            resource.data.status == 'requested' &&
+            request.resource.data.status == 'scheduled' &&
+            request.resource.data.driverId == request.auth.uid
+          ) ||
+          // RSVP-only update: only rsvps and updatedAt changed
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rsvps', 'updatedAt']) &&
+            request.resource.data.rsvps.size() <= 7
+          )
+        );
+
+      // Admins can delete any ride. The ride's driver can delete their ride.
+      allow delete: if isAdminUser() ||
+        (isAuthenticated() && resource.data.driverId == request.auth.uid);
+    }
+
+    // ===============================================================
+    // Notifications Collection
+    // ===============================================================
+
+    match /notifications/{notificationId} {
+      // Authenticated users can create notifications
+      allow create: if isAuthenticated();
+
+      // No client reads/updates/deletes (Cloud Function processes these)
+      allow read, update, delete: if false;
+    }
+
+    // ===============================================================
+    // Default: deny all
+    // ===============================================================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
