@@ -18,13 +18,14 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Connect to emulators in development
-if (location.hostname === 'localhost') {
+// Connect to emulators in development (guard against HMR double-connect)
+if (location.hostname === 'localhost' && !window.__EMULATORS_CONNECTED__) {
   try {
     connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
     connectFirestoreEmulator(db, 'localhost', 8080);
+    window.__EMULATORS_CONNECTED__ = true;
   } catch (e) {
-    // Emulators may not be running — ignore
+    console.warn('Could not connect to emulators:', e.message);
   }
 }
 

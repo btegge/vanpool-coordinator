@@ -113,7 +113,7 @@ export async function adminExportView(container) {
       a.href = url;
       a.download = `vanpool-report-${startDate}-to-${endDate}.csv`;
       a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
 
       showToast(`Downloaded ${rides.length} rides`, 'success');
 

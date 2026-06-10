@@ -1,9 +1,10 @@
 // Auth utility functions
-import { doc, getDoc, setDoc, getDocs, deleteDoc, collection, query, limit, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocs, deleteDoc, collection, query, where, limit, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase.js';
 
 /** Cache for user profiles to reduce Firestore reads */
 const profileCache = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Get a user profile from Firestore
@@ -11,13 +12,14 @@ const profileCache = new Map();
  * @returns {Promise<object|null>}
  */
 export async function getUserProfile(uid) {
-  if (profileCache.has(uid)) {
-    return profileCache.get(uid);
+  const cached = profileCache.get(uid);
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+    return cached.data;
   }
   const snap = await getDoc(doc(db, 'users', uid));
   if (snap.exists()) {
     const profile = { id: snap.id, ...snap.data() };
-    profileCache.set(uid, profile);
+    profileCache.set(uid, { data: profile, timestamp: Date.now() });
     return profile;
   }
   return null;
@@ -77,11 +79,14 @@ export async function linkUserProfile(uid, email) {
     return existingDoc.data();
   }
 
-  // Look up by email in users collection (admin may have pre-created)
-  const allUsers = await getDocs(collection(db, 'users'));
-  for (const userDoc of allUsers.docs) {
-    const data = userDoc.data();
-    if (data.email === email && userDoc.id !== uid) {
+  // Look up by email using an indexed query (not a full collection scan)
+  const q = query(collection(db, 'users'), where('email', '==', email), limit(1));
+  const snap = await getDocs(q);
+
+  if (!snap.empty) {
+    const userDoc = snap.docs[0];
+    if (userDoc.id !== uid) {
+      const data = userDoc.data();
       // Found a pre-created user doc. Copy it to the new UID-based doc
       await setDoc(doc(db, 'users', uid), {
         ...data,

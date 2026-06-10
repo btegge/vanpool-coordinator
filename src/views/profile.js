@@ -8,6 +8,7 @@ import { createBadge } from '../components/badge.js';
 import { showToast } from '../components/toast.js';
 import { navigate } from '../router.js';
 import { signOut } from 'firebase/auth';
+import { escapeHtml } from '../utils/helpers.js';
 
 const editIcon = `<svg viewBox="0 0 24 24"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`;
 const logoutIcon = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
@@ -55,7 +56,7 @@ export async function profileView(container) {
           </div>
           <h2 class="profile-header__name">${getDisplayName(profile)}</h2>
           <div class="profile-header__meta">
-            ${createBadge(profile.role.toLowerCase()).outerHTML}
+            ${createBadge((profile.role || 'unknown').toLowerCase()).outerHTML}
             ${profile.isAdmin ? createBadge('admin', 'Admin').outerHTML : ''}
           </div>
         </div>
@@ -64,19 +65,19 @@ export async function profileView(container) {
           <div class="form-group">
             <label class="form-group__label" for="profile-first-name">First Name</label>
             <input class="input" type="text" id="profile-first-name" name="firstName"
-              value="${profile.firstName || ''}" required maxlength="50" autocomplete="given-name" />
+              value="${escapeHtml(profile.firstName) || ''}" required maxlength="50" autocomplete="given-name" />
           </div>
 
           <div class="form-group">
             <label class="form-group__label" for="profile-last-name">Last Name</label>
             <input class="input" type="text" id="profile-last-name" name="lastName"
-              value="${profile.lastName || ''}" required maxlength="50" autocomplete="family-name" />
+              value="${escapeHtml(profile.lastName) || ''}" required maxlength="50" autocomplete="family-name" />
           </div>
 
-          <div class="form-group">
-            <label class="form-group__label" for="profile-email">Email</label>
-            <input class="input" type="email" id="profile-email" name="email"
-              value="${profile.email || ''}" required maxlength="254" autocomplete="email" />
+          <div class="form-group" style="opacity: 0.5;">
+            <label class="form-group__label">Email</label>
+            <div class="input" style="cursor: not-allowed;">${escapeHtml(profile.email) || ''}</div>
+            <p class="form-group__hint">Email is tied to your sign-in identity and cannot be changed here.</p>
           </div>
 
           <div class="form-group" style="opacity: 0.5;">
@@ -125,7 +126,6 @@ export async function profileView(container) {
       await updateUser(user.uid, {
         firstName: form.firstName.value.trim(),
         lastName: form.lastName.value.trim(),
-        email: form.email.value.trim(),
       });
       clearProfileCache(user.uid);
       showToast('Profile updated!', 'success');

@@ -1,7 +1,7 @@
 // Ride CRUD utilities
 import {
   collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp, arrayUnion, arrayRemove
+  query, where, orderBy, serverTimestamp, runTransaction
 } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { queueNotification } from './notifications.js';
@@ -132,7 +132,7 @@ export async function createRecurringRides(baseRide, pattern, endDate) {
     }
 
     if (shouldCreate) {
-      const dateStr = current.toISOString().split('T')[0];
+      const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
       const id = await createRide({
         ...baseRide,
         date: dateStr,
@@ -180,8 +180,9 @@ export async function deleteRide(rideId, rideData) {
  * @param {string} rideId
  * @param {string} driverId
  * @param {string} driverName
+ * @param {string} rideDate - YYYY-MM-DD date of the ride
  */
-export async function claimRide(rideId, driverId, driverName) {
+export async function claimRide(rideId, driverId, driverName, rideDate) {
   await updateDoc(doc(db, RIDES_COLLECTION, rideId), {
     status: 'scheduled',
     driverId,
@@ -189,10 +190,9 @@ export async function claimRide(rideId, driverId, driverName) {
     updatedAt: serverTimestamp(),
   });
 
-  // Queue notification
-  const ride = await getRide(rideId);
+  // Queue notification (use the date passed in, avoid re-reading the doc)
   await queueNotification('ride_claimed', {
-    date: ride.date,
+    date: rideDate,
     driverName,
   });
 }
@@ -204,29 +204,34 @@ export async function claimRide(rideId, driverId, driverName) {
  * @returns {Promise<'added'|'removed'|'full'>}
  */
 export async function toggleRsvp(rideId, userId) {
-  const ride = await getRide(rideId);
-  if (!ride) throw new Error('Ride not found');
+  const rideRef = doc(db, RIDES_COLLECTION, rideId);
 
-  const rsvps = ride.rsvps || [];
+  return await runTransaction(db, async (transaction) => {
+    const rideDoc = await transaction.get(rideRef);
+    if (!rideDoc.exists()) throw new Error('Ride not found');
 
-  if (rsvps.includes(userId)) {
-    // Remove RSVP
-    await updateDoc(doc(db, RIDES_COLLECTION, rideId), {
-      rsvps: arrayRemove(userId),
-      updatedAt: serverTimestamp(),
-    });
-    return 'removed';
-  } else {
-    // Add RSVP (check capacity)
-    if (rsvps.length >= MAX_RSVP) {
-      return 'full';
+    const ride = rideDoc.data();
+    const rsvps = ride.rsvps || [];
+
+    if (rsvps.includes(userId)) {
+      // Remove RSVP
+      transaction.update(rideRef, {
+        rsvps: rsvps.filter(id => id !== userId),
+        updatedAt: serverTimestamp(),
+      });
+      return 'removed';
+    } else {
+      // Add RSVP (check capacity)
+      if (rsvps.length >= MAX_RSVP) {
+        return 'full';
+      }
+      transaction.update(rideRef, {
+        rsvps: [...rsvps, userId],
+        updatedAt: serverTimestamp(),
+      });
+      return 'added';
     }
-    await updateDoc(doc(db, RIDES_COLLECTION, rideId), {
-      rsvps: arrayUnion(userId),
-      updatedAt: serverTimestamp(),
-    });
-    return 'added';
-  }
+  });
 }
 
 /**

@@ -9,6 +9,7 @@ import { showConfirm } from '../components/modal.js';
 import { showToast } from '../components/toast.js';
 import { navigate } from '../router.js';
 import { getAllUsers } from '../utils/users.js';
+import { escapeHtml } from '../utils/helpers.js';
 
 const backIcon = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`;
 
@@ -110,7 +111,7 @@ export async function rideDetailView(container, params) {
             ${ride.status === 'scheduled' ? `
               <div>
                 <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;">Driver</div>
-                <div style="font-weight: var(--font-weight-semibold);">${ride.driverName || 'Unknown'}</div>
+                <div style="font-weight: var(--font-weight-semibold);">${escapeHtml(ride.driverName) || 'Unknown'}</div>
               </div>
             ` : ''}
           </div>
@@ -130,7 +131,7 @@ export async function rideDetailView(container, params) {
               ${rsvpUsers.map((name, i) => `
                 <div style="display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-xs) 0; font-size: var(--font-size-sm); color: var(--color-text-secondary);">
                   <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--color-primary); flex-shrink: 0;"></span>
-                  ${name}
+                  ${escapeHtml(name)}
                 </div>
               `).join('')}
             </div>
@@ -205,7 +206,7 @@ export async function rideDetailView(container, params) {
     btn.disabled = true;
     btn.textContent = 'Claiming…';
     try {
-      await claimRide(rideId, user.uid, getDisplayName(profile));
+      await claimRide(rideId, user.uid, getDisplayName(profile), ride.date);
       showToast('Ride claimed! You\'re the driver.', 'success');
       await rideDetailView(container, params);
     } catch (e) {

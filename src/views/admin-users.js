@@ -10,6 +10,7 @@ import { showToast } from '../components/toast.js';
 import { navigate } from '../router.js';
 import { queueNotification } from '../utils/notifications.js';
 import { sendSignInLinkToEmail } from 'firebase/auth';
+import { escapeHtml } from '../utils/helpers.js';
 
 const backIcon = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`;
 const plusIcon = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
@@ -52,11 +53,11 @@ export async function adminUsersView(container) {
             <div class="list-item" data-user-id="${u.id}">
               ${createAvatar(u, 'sm').outerHTML}
               <div class="list-item__content">
-                <div class="list-item__title">${getDisplayName(u)}</div>
-                <div class="list-item__subtitle">${u.email || ''}</div>
+                <div class="list-item__title">${escapeHtml(getDisplayName(u))}</div>
+                <div class="list-item__subtitle">${escapeHtml(u.email) || ''}</div>
               </div>
               <div class="list-item__meta">
-                ${createBadge(u.role.toLowerCase()).outerHTML}
+                ${createBadge((u.role || 'unknown').toLowerCase()).outerHTML}
                 ${u.isAdmin ? createBadge('admin', 'Admin').outerHTML : ''}
               </div>
             </div>
@@ -164,7 +165,7 @@ export async function adminUsersView(container) {
         await queueNotification('user_invite', { email: userData.email });
 
         modal.close();
-        showToast(`${userData.firstName} added! Magic link sent.`, 'success');
+        showToast(`${escapeHtml(userData.firstName)} added! Magic link sent.`, 'success');
         await render();
       } catch (error) {
         showToast(error.message || 'Failed to add user', 'error');
@@ -180,15 +181,15 @@ export async function adminUsersView(container) {
       <form class="form" id="edit-user-form">
         <div class="form-group">
           <label class="form-group__label" for="edit-first-name">First Name</label>
-          <input class="input" type="text" id="edit-first-name" name="firstName" value="${userData.firstName || ''}" required maxlength="50" />
+          <input class="input" type="text" id="edit-first-name" name="firstName" value="${escapeHtml(userData.firstName) || ''}" required maxlength="50" />
         </div>
         <div class="form-group">
           <label class="form-group__label" for="edit-last-name">Last Name</label>
-          <input class="input" type="text" id="edit-last-name" name="lastName" value="${userData.lastName || ''}" required maxlength="50" />
+          <input class="input" type="text" id="edit-last-name" name="lastName" value="${escapeHtml(userData.lastName) || ''}" required maxlength="50" />
         </div>
         <div class="form-group">
           <label class="form-group__label" for="edit-email">Email</label>
-          <input class="input" type="email" id="edit-email" name="email" value="${userData.email || ''}" required maxlength="254" />
+          <input class="input" type="email" id="edit-email" name="email" value="${escapeHtml(userData.email) || ''}" required maxlength="254" />
         </div>
         <div class="form-group">
           <label class="form-group__label">Role</label>

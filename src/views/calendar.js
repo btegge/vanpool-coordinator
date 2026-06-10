@@ -4,6 +4,7 @@ import { getUserProfile } from '../utils/auth.js';
 import { getRidesForMonth, getTodayString, formatTime } from '../utils/rides.js';
 import { renderNav } from '../components/nav.js';
 import { navigate } from '../router.js';
+import { escapeHtml } from '../utils/helpers.js';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = [
@@ -28,6 +29,7 @@ export async function calendarView(container) {
   let viewMonth = todayParts[1] - 1; // 0-indexed
   let rides = [];
   let selectedDate = null;
+  let isLoading = false;
 
   async function loadRides() {
     try {
@@ -56,7 +58,7 @@ export async function calendarView(container) {
     let calendarHTML = `
       <div class="calendar slide-up">
         <div class="calendar__nav">
-          <button class="calendar__nav-btn" id="cal-prev" ${isPastMonth || isCurrentMonth ? 'disabled' : ''} aria-label="Previous month">
+          <button class="calendar__nav-btn" id="cal-prev" aria-label="Previous month">
             ${chevronLeft}
           </button>
           <h2 class="calendar__month-label">${MONTH_NAMES[viewMonth]} ${viewYear}</h2>
@@ -135,7 +137,7 @@ export async function calendarView(container) {
               <div class="ride-card__info">
                 <div class="ride-card__time">${formatTime(ride.departureFromTC)} → ${formatTime(ride.departureFromWork)}</div>
                 <div class="ride-card__meta">
-                  ${ride.status === 'scheduled' ? `Driver: ${ride.driverName || 'Unknown'}` : 'Needs a driver'}
+                  ${ride.status === 'scheduled' ? `Driver: ${escapeHtml(ride.driverName) || 'Unknown'}` : 'Needs a driver'}
                 </div>
               </div>
               <div class="ride-card__rsvp">
@@ -169,18 +171,24 @@ export async function calendarView(container) {
   function bindEvents() {
     // Month navigation
     container.querySelector('#cal-prev')?.addEventListener('click', async () => {
+      if (isLoading) return;
+      isLoading = true;
       viewMonth--;
       if (viewMonth < 0) { viewMonth = 11; viewYear--; }
       selectedDate = null;
       await loadRides();
+      isLoading = false;
       render();
     });
 
     container.querySelector('#cal-next')?.addEventListener('click', async () => {
+      if (isLoading) return;
+      isLoading = true;
       viewMonth++;
       if (viewMonth > 11) { viewMonth = 0; viewYear++; }
       selectedDate = null;
       await loadRides();
+      isLoading = false;
       render();
     });
 

@@ -35,11 +35,11 @@ rules_version = '2';
 // Collection: notifications
 // Document ID: auto-generated
 // Fields:
-//   - type: string (required)
-//   - recipientEmails: list (required)
-//   - subject: string (required)
-//   - body: string (required)
-//   - processed: bool (required)
+//   - to: list (required, recipient email addresses)
+//   - message: map (required)
+//     - subject: string (required)
+//     - text: string (required)
+//     - html: string (required)
 //   - createdAt: timestamp (required)
 //
 // ===============================================================
@@ -134,7 +134,9 @@ service cloud.firestore {
     match /users/{userId} {
       // Any authenticated user can read their own document
       // Admins can read any user document
-      allow read: if isOwner(userId) || isAdminUser();
+      // Authenticated users can read docs matching their auth email (for profile linking)
+      allow read: if isOwner(userId) || isAdminUser() ||
+        (isAuthenticated() && resource.data.email == request.auth.token.email);
 
       // First-user bootstrap: if no users exist, allow the first user
       // to create their own doc with isAdmin=true.
@@ -163,8 +165,10 @@ service cloud.firestore {
           isAdminUser()
         );
 
-      // Only admins can delete users
-      allow delete: if isAdminUser();
+      // Admins can delete users.
+      // Authenticated users can delete a pre-created doc matching their email (profile linking).
+      allow delete: if isAdminUser() ||
+        (isAuthenticated() && resource.data.email == request.auth.token.email);
     }
 
     // ===============================================================

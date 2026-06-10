@@ -1,6 +1,9 @@
 // Notification queue utilities (configured for custom Gmail Cloud Function)
 // Writes notification documents to Firestore. The custom `sendNotificationEmail`
 // Cloud Function automatically picks these up and sends them via Gmail SMTP.
+//
+// Document schema: { to: string[], message: { subject, text, html }, createdAt }
+//
 import { collection, addDoc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase.js';
 

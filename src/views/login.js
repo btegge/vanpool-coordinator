@@ -141,11 +141,13 @@ async function handleSignInLink(container) {
       email = window.prompt('Please enter your email address to confirm sign-in:');
     }
 
-    if (!email) {
+    if (!email || !email.trim()) {
       showToast('Email required to complete sign-in', 'error');
       navigate('/login');
       return;
     }
+
+    email = email.trim();
 
     const result = await signInWithEmailLink(auth, email, window.location.href);
     const user = result.user;
