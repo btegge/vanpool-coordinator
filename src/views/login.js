@@ -4,6 +4,7 @@ import {
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
+  signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { hasAnyUsers, createFirstAdmin, linkUserProfile } from '../utils/auth.js';
 import { navigate } from '../router.js';
@@ -79,6 +80,20 @@ export async function loginView(container) {
         <div class="spinner spinner--lg" style="margin: 0 auto var(--space-lg);"></div>
         <p id="login-status-text" style="color: var(--color-text-secondary); font-size: var(--font-size-sm);"></p>
       </div>
+
+      ${location.hostname === 'localhost' ? `
+      <div id="dev-signin" style="margin-top: var(--space-xl); padding: var(--space-lg); border: 1px dashed var(--color-border); border-radius: var(--radius-lg); background: rgba(99,102,241,0.05);">
+        <p style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-align:center; margin-bottom: var(--space-md);">
+          🔧 Dev Quick Sign-In (emulator only)
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm);">
+          <button class="btn btn--secondary btn--sm dev-signin-btn" data-email="alice@test.com">Alice (Admin)</button>
+          <button class="btn btn--secondary btn--sm dev-signin-btn" data-email="bob@test.com">Bob (Driver)</button>
+          <button class="btn btn--secondary btn--sm dev-signin-btn" data-email="carol@test.com">Carol (Rider)</button>
+          <button class="btn btn--secondary btn--sm dev-signin-btn" data-email="dave@test.com">Dave (Rider)</button>
+        </div>
+      </div>
+      ` : ''}
     </div>
   `;
 
@@ -120,6 +135,22 @@ export async function loginView(container) {
       submitBtn.textContent = isFirstUser ? '✨ Create Account & Send Link' : '📧 Send Magic Link';
       showToast(error.message || 'Failed to send magic link', 'error');
     }
+  });
+
+  // Dev quick sign-in (emulator only)
+  container.querySelectorAll('.dev-signin-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Signing in…';
+      try {
+        await signInWithEmailAndPassword(auth, btn.dataset.email, 'testpass123');
+      } catch (error) {
+        console.error('Dev sign-in failed:', error);
+        showToast(error.message || 'Dev sign-in failed', 'error');
+        btn.disabled = false;
+        btn.textContent = btn.dataset.email.split('@')[0];
+      }
+    });
   });
 }
 
