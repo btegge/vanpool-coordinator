@@ -3,15 +3,22 @@
 Welcome to the Vanpool Coordinator! This mobile-friendly application is designed to make coordinating daily rides, volunteering to drive, and reserving your seat as easy as possible for your vanpool group.
 
 ## 1. Getting Started: Logging In
-Say goodbye to forgotten passwords! The app uses a secure, passwordless authentication system called **Magic Links**. 
-* Enter your email address on the login screen.
-* Check your email inbox for a secure login link.
-* Click the link, and you'll be automatically signed into the application.
+Say goodbye to forgotten passwords! The app uses a secure, passwordless authentication system called **Magic Links**.
 
-*(Note: If you are the very first person to log into your group's app, you will automatically be assigned the **Admin** role to help bootstrap the group.)*
+![Login Screen](public/images/login.png)
+
+1. Enter your email address on the login screen.
+2. Check your email inbox for a secure login link.
+3. Click the link, and you'll be automatically signed into the application.
+
+> [!NOTE]
+> If you are the very first person to log into your group's app, you will automatically be assigned the **Admin** role to help bootstrap the group.
 
 ## 2. The Calendar Interface
 The heart of the Vanpool Coordinator is the **Visual Calendar**. Designed with a sleek, dynamic dark-mode interface and smooth animations, the calendar gives you a complete monthly overview of your group's travel plans.
+
+![Calendar Interface](public/images/calendar.png)
+
 * **View Rides:** Instantly see which days have scheduled rides, open requests, and who the assigned drivers are.
 * **Interact:** Tap on any day to view details, see the current passenger list, RSVP, or volunteer to drive.
 
