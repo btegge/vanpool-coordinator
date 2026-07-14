@@ -198,6 +198,27 @@ export async function claimRide(rideId, driverId, driverName, rideDate) {
 }
 
 /**
+ * Assign a driver to a ride (admin action)
+ * @param {string} rideId
+ * @param {string} driverId
+ * @param {string} driverName
+ * @param {string} rideDate - YYYY-MM-DD date of the ride
+ */
+export async function assignDriver(rideId, driverId, driverName, rideDate) {
+  await updateDoc(doc(db, RIDES_COLLECTION, rideId), {
+    status: 'scheduled',
+    driverId,
+    driverName,
+    updatedAt: serverTimestamp(),
+  });
+
+  await queueNotification('ride_claimed', {
+    date: rideDate,
+    driverName,
+  });
+}
+
+/**
  * Toggle RSVP for a ride
  * @param {string} rideId
  * @param {string} userId

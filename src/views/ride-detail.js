@@ -1,11 +1,11 @@
 // Ride detail view — View, RSVP, claim, edit, cancel a ride
 import { auth } from '../firebase.js';
 import { getUserProfile, getDisplayName, isAdmin, isDriver } from '../utils/auth.js';
-import { getRide, formatTime, formatDate, toggleRsvp, claimRide, deleteRide } from '../utils/rides.js';
+import { getRide, formatTime, formatDate, toggleRsvp, claimRide, deleteRide, assignDriver } from '../utils/rides.js';
 import { renderNav } from '../components/nav.js';
 import { createAvatar } from '../components/avatar.js';
 import { createBadge } from '../components/badge.js';
-import { showConfirm } from '../components/modal.js';
+import { showConfirm, showModal } from '../components/modal.js';
 import { showToast } from '../components/toast.js';
 import { navigate } from '../router.js';
 import { getAllUsers } from '../utils/users.js';
@@ -148,6 +148,13 @@ export async function rideDetailView(container, params) {
             🚗 Claim This Ride
           </button>
         ` : ''}
+
+        <!-- Assign Driver Button (for admins on requested rides) -->
+        ${userIsAdmin && ride.status === 'requested' ? `
+          <button class="btn btn--secondary btn--lg btn--block" id="assign-driver" style="margin-top: var(--space-md);">
+            👤 Assign Driver
+          </button>
+        ` : ''}
       </div>
     </div>
   `;
@@ -213,6 +220,58 @@ export async function rideDetailView(container, params) {
       showToast('Failed to claim ride', 'error');
       btn.disabled = false;
       btn.textContent = '🚗 Claim This Ride';
+    }
+  });
+
+  container.querySelector('#assign-driver')?.addEventListener('click', async () => {
+    const btn = container.querySelector('#assign-driver');
+    btn.disabled = true;
+
+    try {
+      const allUsers = await getAllUsers();
+      const drivers = allUsers.filter(u => u.role === 'Driver');
+
+      if (drivers.length === 0) {
+        showToast('No drivers available', 'error');
+        btn.disabled = false;
+        return;
+      }
+
+      const listEl = document.createElement('div');
+      listEl.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: var(--space-sm); max-height: 300px; overflow-y: auto;">
+          ${drivers.map(d => `
+            <button class="btn btn--secondary btn--block assign-driver-option" data-driver-id="${d.id}" data-driver-name="${escapeHtml(getDisplayName(d))}" style="text-align: left; justify-content: flex-start;">
+              ${escapeHtml(getDisplayName(d))}
+            </button>
+          `).join('')}
+        </div>
+      `;
+
+      const modal = showModal({
+        title: 'Assign Driver',
+        content: listEl,
+        onClose: () => { btn.disabled = false; },
+      });
+
+      listEl.querySelectorAll('.assign-driver-option').forEach(option => {
+        option.addEventListener('click', async () => {
+          const driverId = option.dataset.driverId;
+          const driverName = option.dataset.driverName;
+          modal.close();
+          try {
+            await assignDriver(rideId, driverId, driverName, ride.date);
+            showToast(`Assigned to ${driverName}`, 'success');
+            await rideDetailView(container, params);
+          } catch (e) {
+            showToast('Failed to assign driver', 'error');
+            btn.disabled = false;
+          }
+        });
+      });
+    } catch (e) {
+      showToast('Failed to load drivers', 'error');
+      btn.disabled = false;
     }
   });
 
